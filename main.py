@@ -56,6 +56,19 @@ def download_and_send_audio(chat_id, url):
         ydl_info_opts = {
             'quiet': True,
             'no_warnings': True,
+            # 🔧 ПАРАМЕТРЫ ДЛЯ ОБХОДА БЛОКИРОВКИ
+            'extract_flat': False,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+            }
         }
         
         with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
@@ -83,6 +96,19 @@ def download_and_send_audio(chat_id, url):
             'outtmpl': 'downloads/%(title)s.%(ext)s',
             'quiet': True,
             'no_warnings': True,
+            # 🔧 ПАРАМЕТРЫ ДЛЯ ОБХОДА БЛОКИРОВКИ
+            'extract_flat': False,
+            'ignoreerrors': True,
+            'no_check_certificate': True,
+            'geo_bypass': True,
+            'geo_bypass_country': 'US',
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-us,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+            }
         }
 
         bot.send_message(chat_id, "⬇️ Загружаю аудио...")
