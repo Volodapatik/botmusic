@@ -41,8 +41,27 @@ def extract_youtube_url(text):
         r'(watch\?v=|embed/|v/|shorts/|.+[?&]v=)?([^&=%\?]{11})'
     )
     match = re.search(youtube_regex, text)
-    return f"https://youtu.be/{match.group(6)}" if match else None
-
+    if match:
+        video_id = match.group(6)
+        return f"https://youtu.be/{video_id}"
+    
+    # Дополнительная проверка для разных форматов ссылок
+    patterns = [
+        r'youtu\.be/([^&=%\?]{11})',
+        r'youtube\.com/watch\?v=([^&=%\?]{11})',
+        r'youtube\.com/embed/([^&=%\?]{11})',
+        r'youtube\.com/v/([^&=%\?]{11})',
+        r'youtube\.com/shorts/([^&=%\?]{11})'
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            video_id = match.group(1)
+            return f"https://youtu.be/{video_id}"
+    
+    return None
+    
 def download_and_send_audio(chat_id, url):
     mp3_path = None
     filename = None
@@ -194,3 +213,4 @@ if __name__ == "__main__":
 
     # Запускаем Flask сервер
     app.run(host='0.0.0.0', port=8000)
+
