@@ -1,0 +1,170 @@
+import re
+import os
+import logging
+import telebot
+import yt_dlp
+from threading import Thread
+from flask import Flask
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Токен бота из переменных окружения
+TOKEN = os.environ['TELEGRAM_BOT_TOKEN']
+bot = telebot.TeleBot(TOKEN, parse_mode=None)
+
+# Увеличенные таймауты для длинных треков
+import telebot.apihelper
+telebot.apihelper.CONNECT_TIMEOUT = 60
+telebot.apihelper.READ_TIMEOUT = 600  # 10 минут на отправку файла
+
+# Flask для веб-сервера
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🎵 YouTube Music Bot is running! Send /start to bot in Telegram"
+
+@app.route('/health')
+def health():
+    return "OK"
+
+def extract_youtube_url(text):
+    """Извлекает YouTube URL из текста сообщения"""
+    youtube_regex = (
+        r'(https?://)?(www\.)?'
+        r'(youtube|youtu|youtube-nocookie)\.(com|be)/'
+        r'(watch\?v=|embed/|v/|shorts/|.+[?&]v=)?([^&=%\?]{11})'
+    )
+    match = re.search(youtube_regex, text)
+    return f"https://youtu.be/{match.group(6)}" if match else None
+
+def download_and_send_audio(chat_id, url):
+    mp3_path = None
+    filename = None
+    try:
+        bot.send_message(chat_id, f"🎵 Начинаю обработку: {url}")
+
+        # Создаем папку downloads
+        os.makedirs("downloads", exist_ok=True)
+
+        # Сначала получаем информацию о видео
+        ydl_info_opts = {
+            'quiet': True,
+            'no_warnings': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+            duration = info.get('duration', 0)
+            title = info.get('title', 'Аудио')
+        
+        # Выбираем качество в зависимости от длительности
+        if duration > 3600:  # > 1 час
+            quality = '96'
+            bot.send_message(chat_id, f"⏱️ Длинный трек ({duration//60} мин). Использую качество 96 kbps...")
+        elif duration > 1800:  # > 30 минут
+            quality = '128'
+            bot.send_message(chat_id, f"⏱️ Трек на {duration//60} минут. Качество: 128 kbps")
+        else:
+            quality = '192'
+        
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': quality,
+            }],
+            'outtmpl': 'downloads/%(title)s.%(ext)s',
+            'quiet': True,
+            'no_warnings': True,
+        }
+
+        bot.send_message(chat_id, "⬇️ Загружаю аудио...")
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
+            mp3_path = os.path.splitext(filename)[0] + '.mp3'
+
+        # Проверяем размер файла
+        file_size = os.path.getsize(mp3_path) / (1024 * 1024)  # в МБ
+        logger.info(f"Размер файла: {file_size:.2f} МБ")
+        
+        if file_size > 50:
+            bot.send_message(chat_id, f"⚠️ Файл слишком большой ({file_size:.1f} МБ). Telegram лимит 50 МБ. Попробуйте более короткое видео.")
+            return
+
+        # Отправка аудио с увеличенным таймаутом
+        bot.send_message(chat_id, f"📤 Отправляю файл ({file_size:.1f} МБ)...")
+        
+        with open(mp3_path, 'rb') as audio_file:
+            bot.send_audio(
+                chat_id, 
+                audio_file,
+                title=title[:64],
+                performer=info.get('uploader', 'Unknown')[:64],
+                duration=duration,
+                timeout=600
+            )
+
+        bot.send_message(chat_id, "✅ Готово! Наслаждайтесь музыкой!")
+
+    except Exception as e:
+        logger.error(f"Ошибка при обработке {url}: {str(e)}", exc_info=True)
+        bot.send_message(chat_id, f"❌ Ошибка: {str(e)}\n\nПопробуйте еще раз или выберите другое видео.")
+    
+    finally:
+        # Удаляем временные файлы
+        try:
+            if mp3_path and os.path.exists(mp3_path):
+                os.remove(mp3_path)
+            if filename and os.path.exists(filename):
+                os.remove(filename)
+        except Exception as e:
+            logger.warning(f"Не удалось удалить временные файлы: {e}")
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message,
+        "🎶 Привет! Просто отправь мне ссылку на YouTube видео, "
+        "и я преобразую его в MP3!\n\n"
+        "Пример: https://youtu.be/3QqwjYC3EAg"
+    )
+
+@bot.message_handler(func=lambda message: True)
+def handle_message(message):
+    url = extract_youtube_url(message.text)
+    if not url:
+        bot.reply_to(message, "❌ Это не похоже на ссылку YouTube. Пришлите корректную ссылку.")
+        return
+
+    # Запускаем в отдельном потоке чтобы не блокировать бота
+    thread = Thread(target=download_and_send_audio, args=(message.chat.id, url))
+    thread.start()
+
+def run_bot():
+    """Запуск бота с автоматическим перезапуском при ошибках"""
+    logger.info("----- Запуск YouTube Music Bot на Koyeb -----")
+    while True:
+        try:
+            bot.infinity_polling(timeout=120, long_polling_timeout=120)
+        except Exception as e:
+            logger.error(f"Ошибка бота: {e}")
+            import time
+            time.sleep(10)
+            logger.info("Перезапуск бота...")
+
+if __name__ == "__main__":
+    # Запускаем бота в отдельном потоке
+    bot_thread = Thread(target=run_bot)
+    bot_thread.daemon = True
+    bot_thread.start()
+
+    # Запускаем Flask сервер
+    app.run(host='0.0.0.0', port=8000)
