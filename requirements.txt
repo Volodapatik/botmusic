@@ -1,4 +1,5 @@
 pyTelegramBotAPI==4.16.1
-yt-dlp==2025.9.26
+yt-dlp==2025.10.01
 flask==2.3.3
 ffmpeg-python==0.2.0
+
