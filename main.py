@@ -51,7 +51,7 @@ def extract_youtube_url(text):
         r'youtube\.com/watch\?v=([^&=%\?]{11})',
         r'youtube\.com/embed/([^&=%\?]{11})',
         r'youtube\.com/v/([^&=%\?]{11})',
-        r'youtube\.com/shorts/([^&=%\?]{11})'
+        r'youtube\.com/shorts/([^&=%\?]{11})'  # ← ДОБАВЬ ЗАПЯТУЮ ЗДЕСЬ!
     ]
     
     for pattern in patterns:
@@ -91,9 +91,15 @@ def download_and_send_audio(chat_id, url):
         }
         
         with yt_dlp.YoutubeDL(ydl_info_opts) as ydl:
-            info = ydl.extract_info(url, download=False)
-            duration = info.get('duration', 0)
-            title = info.get('title', 'Аудио')
+    info = ydl.extract_info(url, download=False)
+    
+    # 🔧 ДОБАВЬ ПРОВЕРКУ НА None
+    if info is None:
+        bot.send_message(chat_id, "❌ YouTube заблокировал запрос. Попробуйте другую ссылку или повторите позже.")
+        return
+    
+    duration = info.get('duration', 0)
+    title = info.get('title', 'Аудио')
         
         # Выбираем качество в зависимости от длительности
         if duration > 3600:  # > 1 час
@@ -213,4 +219,5 @@ if __name__ == "__main__":
 
     # Запускаем Flask сервер
     app.run(host='0.0.0.0', port=8000)
+
 
